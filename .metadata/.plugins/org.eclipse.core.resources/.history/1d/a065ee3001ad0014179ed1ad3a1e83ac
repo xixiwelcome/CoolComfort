@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">CoolComfort</string>
+    <string name="img_main_desc">背景图片</string>
+    <string name="img_machine_desc">机器图片</string>
+    <string name="title_activity_duration">持续时间设置</string>
+    
+    
+    <string name="duration_always">永久</string>
+    <string name="duration_text">定时：</string>
+    <string name="second">秒</string>
+    <string name="minute">分</string>
+    <string name="hour">时</string>
+    
+    <string name="btn_hide_icon_text">隐藏图标</string>
+    <string name="btn_show_icon_text">隐藏图标</string>
+    <string name="btn_stop_text">停  止</string>
+    <string name="btn_hide_all_text">只看背景</string>
+    <string name="btn_change_bg_text">更换背景</string>
+    <string name="btn_backstage_text">后台运行</string>
+    
+    <string name="push_to_start">未启动</string>
+
+</resources>

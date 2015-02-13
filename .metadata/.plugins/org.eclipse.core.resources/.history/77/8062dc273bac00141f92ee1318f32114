@@ -1,0 +1,29 @@
+package com.cool.comfort.util;
+
+import com.cool.comfort.R;
+
+public class Util {
+
+
+	/**
+	 * 时间（秒）数组转化为ListView用的字符串
+	 */
+	public String secondToString(int i) {
+		String str_tmp = "";
+		if (i == 0) {
+			str_tmp = getString(R.string.duration_always);
+		} else {
+			
+			if (i / (3600) > 0) {
+				str_tmp = (i / 3600) + getString(R.string.hour);
+			}
+			if ((i % 3600) / 60 > 0) {
+				str_tmp += (i / 60) + getString(R.string.minute);
+			}
+			if ((i % 60) > 0) {
+				str_tmp += i + getString(R.string.second);
+			}			
+		}
+		return str_tmp;
+	}
+}

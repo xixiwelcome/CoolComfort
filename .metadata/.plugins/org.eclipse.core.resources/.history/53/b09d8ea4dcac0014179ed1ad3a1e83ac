@@ -1,0 +1,30 @@
+package com.cool.comfort.util;
+
+import android.content.Context;
+
+import com.cool.comfort.R;
+
+public class Utility {
+
+	/**
+	 * 时间（秒）数组转化为ListView用的字符串
+	 */
+	public static String secondToString(Context context, int i) {
+		String str_tmp = "";
+		if (i == 0) {
+			str_tmp = context.getString(R.string.duration_always);
+		} else {
+			
+			if (i / (3600) > 0) {
+				str_tmp = (i / 3600) + context.getString(R.string.hour);
+			}
+			if ((i % 3600) / 60 > 0) {
+				str_tmp += (i / 60) + context.getString(R.string.minute);
+			}
+			if ((i % 60) > 0) {
+				str_tmp += i + context.getString(R.string.second);
+			}			
+		}
+		return str_tmp;
+	}
+}

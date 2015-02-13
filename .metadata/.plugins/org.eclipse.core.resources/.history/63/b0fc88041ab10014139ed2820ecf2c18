@@ -1,0 +1,490 @@
+package com.cool.comfort;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.CountDownTimer;
+import android.os.Environment;
+import android.os.Vibrator;
+import android.preference.PreferenceManager;
+import android.provider.MediaStore;
+import android.util.DisplayMetrics;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.SeekBar;
+import android.widget.SeekBar.OnSeekBarChangeListener;
+import android.widget.TextView;
+
+import com.cool.comfort.util.Utility;
+import com.cool.comfort.util.VerticalSeekBar;
+
+public class MainActivity extends Activity implements OnClickListener {
+	/**
+	 * 定时器刷新间隔（ms）
+	 */
+	private static final int TIMER_REFRESH = 1000;
+
+	/**
+	 * 频率调节参数
+	 */
+	private static final int K_FREQ = 1000;
+
+	/**
+	 * 获取图片操作
+	 */
+	private static final int CROP_PHOTO = 101;
+	private static final int TAKE_PHOTO = 100;
+
+	private Uri imageUri;
+
+	private Vibrator vibrator;
+
+	/**
+	 * 储蓄时间计时器
+	 */
+	private MyDownTimer mcDuration;
+
+	/**
+	 * 延迟启动计时器
+	 */
+	private MyDownTimer mcTiming;
+
+	/**
+	 * 各控件
+	 */
+	private VerticalSeekBar frequency;
+	private Button btnDuration;
+	private Button btnTiming;
+	private Button btnStop;
+	private Button btnBackstage;
+	private Button btnHideAll;
+	private Button btnChangeBg;
+
+	private TextView hintText;
+	private TextView durationText;
+	private TextView timingText;
+
+	private TextView durationHintText;
+	private TextView timingHintText;
+
+	private ImageView imgMain;
+	private ImageView imgMachine;
+
+	/**
+	 * 当前状态
+	 */
+	private boolean isStop;
+	private boolean isHide;
+
+	/**
+	 * 运行剩余时间
+	 */
+	private int durLeftMs;
+
+	/**
+	 * 当前设置
+	 */
+	private int durationPos;
+	private int timingPos;
+
+	/**
+	 * 获取所有试图（背景除外）
+	 */
+	private View[] getAllViews() {
+		View[] allViews = { frequency, btnDuration, btnTiming, btnStop,
+				btnHideAll, btnBackstage, btnChangeBg, hintText, durationText,
+				timingText, imgMachine, durationHintText, timingHintText };
+		return allViews;
+	}
+
+	private int[] getXY() {
+		int[] xy = new int[2];
+		DisplayMetrics dm = new DisplayMetrics();
+		getWindowManager().getDefaultDisplay().getMetrics(dm);
+		int widthPixels = dm.widthPixels;
+		int heightPixels = dm.heightPixels;
+		float density = dm.density;
+		xy[0] = (int) (widthPixels * density);
+		xy[1] = (int) (heightPixels * density);
+		return xy;
+	}
+
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
+
+		imgMain = (ImageView) findViewById(R.id.img_main);
+		imgMachine = (ImageView) findViewById(R.id.img_machine);
+		durationHintText = (TextView) findViewById(R.id.text_duration);
+		timingHintText = (TextView) findViewById(R.id.text_timing);
+		isHide = false;
+
+		// 创建File对象，用于存储选择的照片
+		outputImage = new File(Environment.getExternalStorageDirectory(),
+				"output_image.jpg");
+
+		frequency = (VerticalSeekBar) findViewById(R.id.frequency);
+		// 设置频率范围
+		frequency.setMax(K_FREQ);
+		frequency.setOnSeekBarChangeListener(sbLis);
+
+		vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+
+		// 读取当前设置
+		SharedPreferences prefs = PreferenceManager
+				.getDefaultSharedPreferences(this);
+		durationPos = prefs.getInt("durationPos",
+				DurationActivity.DUR_DEFAULT_POS);
+		// 延迟启动选项每次开启程序都应是未启动状态
+		// 需要重新设置才能生效
+		/*
+		 * timingPos = prefs.getInt("timingPos",
+		 * DurationActivity.TIMING_DEFAULT_POS);
+		 */
+		timingPos = DurationActivity.TIMING_DEFAULT_POS;
+
+		btnDuration = (Button) findViewById(R.id.btn_duration);
+		btnTiming = (Button) findViewById(R.id.btn_timing);
+		btnStop = (Button) findViewById(R.id.btn_stop);
+		btnBackstage = (Button) findViewById(R.id.btn_backstage);
+		btnChangeBg = (Button) findViewById(R.id.btn_change_bg);
+		btnHideAll = (Button) findViewById(R.id.btn_hide_all);
+
+		btnDuration.setOnClickListener(this);
+		btnTiming.setOnClickListener(this);
+		btnStop.setOnClickListener(this);
+		btnBackstage.setOnClickListener(this);
+		btnChangeBg.setOnClickListener(this);
+		btnHideAll.setOnClickListener(this);
+
+		imgMain.setOnClickListener(this);
+
+		hintText = (TextView) findViewById(R.id.hint_text);
+		durationText = (TextView) findViewById(R.id.duration_time);
+		timingText = (TextView) findViewById(R.id.timing_time);
+
+		timingText.setText(Utility.secondToString(MainActivity.this,
+				DurationActivity.TIMING_OFF, DurationActivity.GET_TIMING));
+
+		// 系统初始化
+		reset();
+	}
+
+	@Override
+	public void onClick(View v) {
+		switch (v.getId()) {
+		case R.id.btn_duration:
+			DurationActivity.actionStart(MainActivity.this, durationPos,
+					DurationActivity.GET_DURATION);
+			break;
+		case R.id.btn_timing:
+			DurationActivity.actionStart(MainActivity.this, timingPos,
+					DurationActivity.GET_TIMING);
+			break;
+		case R.id.btn_backstage:
+			Intent intent = new Intent(Intent.ACTION_MAIN);
+			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);// 注意开启新栈
+			intent.addCategory(Intent.CATEGORY_HOME);
+			this.startActivity(intent);
+			break;
+		case R.id.btn_change_bg:
+			try {
+				if (outputImage.exists()) {
+					outputImage.delete();
+				}
+				outputImage.createNewFile();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			imageUri = Uri.fromFile(outputImage);
+			intent = new Intent(Intent.ACTION_PICK);
+			intent.setType("image/*");
+			intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
+			startActivityForResult(intent, TAKE_PHOTO);
+			break;
+		case R.id.btn_hide_all:
+			set_multi_visibility(getAllViews(), false);
+			isHide = true;
+			break;
+		case R.id.img_main:
+			// 只看背景时， 如果点击背景，则显示所有视图
+			if (isHide) {
+				set_multi_visibility(getAllViews(), true);
+				isHide = false;
+			}
+			break;
+		case R.id.btn_stop:
+			reset();
+			break;
+		default:
+			break;
+		}
+	}
+
+	private OnSeekBarChangeListener sbLis = new OnSeekBarChangeListener() {
+
+		@Override
+		public void onProgressChanged(SeekBar seekBar, int progress,
+				boolean fromUser) {
+			// 改变频率
+			int freq = frequency.getProgress();
+			// 先停止
+			vibrator.cancel();
+			start_vibrator(freq);
+		}
+
+		@Override
+		public void onStartTrackingTouch(SeekBar seekBar) {
+			// 开始拖动，改变thumb图标
+		}
+
+		@Override
+		public void onStopTrackingTouch(SeekBar seekBar) {
+			// 结束拖动，恢复thumb图标
+		}
+
+	};
+
+	/**
+	 * 启动
+	 */
+	private void start_vibrator(int freq) {
+		// 启动入口
+		if (freq <= 5) {
+			// 频率过低，直接停止
+			return;
+		} else if (freq >= K_FREQ - 5) {
+			// 频率过高，设置为剩余时间连续震动
+			vibrator.vibrate(durLeftMs);
+			hintText.setText(R.string.speed_fastest);
+		} else {
+			if (freq <= K_FREQ / 3) {
+				hintText.setText(R.string.speed_slow);
+			} else if (freq <= K_FREQ * 2 / 3) {
+				hintText.setText(R.string.speed_normal);
+			} else {
+				hintText.setText(R.string.speed_fast);
+			}
+			long[] pattern = { 0, 100, K_FREQ - (freq * freq) / K_FREQ };
+			vibrator.vibrate(pattern, 0);
+		}
+		if (isStop
+				&& DurationActivity.ARR_DUR_SECONDS[durationPos] != DurationActivity.DUR_ALWAYS) {
+			// 如果尚未开始且不是永久执行，则开始计时
+			mcDuration = new MyDownTimer(
+					DurationActivity.ARR_DUR_SECONDS[durationPos] * 1000,
+					TIMER_REFRESH, DurationActivity.GET_DURATION);
+			mcDuration.start();
+			isStop = false;
+		}
+	}
+
+	/**
+	 * 重置
+	 */
+	private void reset() {
+		vibrator.cancel();
+		frequency.setProgress(0);
+		if (mcDuration != null) {
+			mcDuration.cancel();
+		}
+		durationText.setText(Utility.secondToString(this,
+				DurationActivity.ARR_DUR_SECONDS[durationPos],
+				DurationActivity.GET_DURATION));
+		isStop = true;
+		durLeftMs = 0;
+		hintText.setText(R.string.push_to_start);
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		switch (requestCode) {
+		case DurationActivity.GET_DURATION:
+			if (resultCode == RESULT_OK) {
+				// 获取新的持续时间
+				int cur_pos = data.getIntExtra("newPos", durationPos);
+				if (durationPos != cur_pos) {
+					durationPos = cur_pos;
+					// 存储新的持续时间
+					SharedPreferences.Editor editor = PreferenceManager
+							.getDefaultSharedPreferences(this).edit();
+					editor.putInt("durationPos", durationPos);
+					editor.commit();
+
+					if (isStop) {
+						// 未运行，修改按钮上的倒计时显示
+						durationText.setText(Utility.secondToString(this,
+								DurationActivity.ARR_DUR_SECONDS[durationPos],
+								DurationActivity.GET_DURATION));
+					} else {
+						// 如果在运行中则重新计时
+						if (mcDuration != null) {
+							mcDuration.cancel();
+						}
+						if (DurationActivity.ARR_DUR_SECONDS[durationPos] != DurationActivity.DUR_ALWAYS) {
+							// 不是永久，则生成计时器
+							mcDuration = new MyDownTimer(
+									DurationActivity.ARR_DUR_SECONDS[durationPos] * 1000,
+									TIMER_REFRESH,
+									DurationActivity.GET_DURATION);
+							mcDuration.start();
+						} else {
+							// 是永久，则显示提示
+							durationText
+									.setText(Utility
+											.secondToString(
+													this,
+													DurationActivity.ARR_DUR_SECONDS[durationPos],
+													DurationActivity.GET_DURATION));
+						}
+					}
+				}
+			}
+			break;
+		case DurationActivity.GET_TIMING:
+			if (resultCode == RESULT_OK) {
+				int cur_pos = data.getIntExtra("newPos", timingPos);
+				if (timingPos != cur_pos) {
+					timingPos = cur_pos;
+					// 存储新的延迟时间
+					/*
+					 * SharedPreferences.Editor editor = PreferenceManager
+					 * .getDefaultSharedPreferences(this).edit();
+					 * editor.putInt("timingPos", timingPos); editor.commit();
+					 */
+
+					if (timingPos == DurationActivity.TIMING_OFF) {
+						// 延迟设置为未开启，修改提示信息
+						timingText.setText(Utility.secondToString(
+								MainActivity.this, DurationActivity.TIMING_OFF,
+								DurationActivity.GET_TIMING));
+					} else {
+						// 延迟设置不是未开启，则启动定时器
+						if (mcTiming != null) {
+							mcTiming.cancel();
+						}
+						mcTiming = new MyDownTimer(
+								DurationActivity.ARR_TIMING_SECONDS[timingPos] * 1000,
+								TIMER_REFRESH * 60, DurationActivity.GET_TIMING);
+						mcTiming.start();
+					}
+				}
+			}
+			break;
+		case CROP_PHOTO:
+			if (resultCode == RESULT_OK) {
+				try {
+					Bitmap bitmap = BitmapFactory
+							.decodeStream(getContentResolver().openInputStream(
+									imageUri));
+					imgMain.setImageBitmap(bitmap); // 将裁剪后的照片显示出来
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				}
+			}
+			break;
+		case TAKE_PHOTO:
+			if (resultCode == RESULT_OK) {
+				crop(Uri.fromFile(tempFile)); // 启动裁剪程序
+			}
+			break;
+		default:
+			break;
+		}
+		super.onActivityResult(requestCode, resultCode, data);
+	}
+
+	/*
+	 * 剪切图片
+	 */
+	private void crop(Uri uri) {
+		// 裁剪图片意图
+		Intent intent = new Intent("com.android.camera.action.CROP");
+		intent.setDataAndType(uri, "image/*");
+		intent.putExtra("crop", "true");
+
+		int[] xy = getXY();
+
+		// 裁剪框的比例
+		intent.putExtra("aspectX", xy[0]);
+		intent.putExtra("aspectY", xy[1]); // 裁剪后输出图片的尺寸大小
+		intent.putExtra("outputX", xy[0]);
+		intent.putExtra("outputY", xy[1]);
+
+		intent.putExtra("outputFormat", "JPEG");// 图片格式
+		intent.putExtra("noFaceDetection", true);// 取消人脸识别
+		intent.putExtra("return-data", true);
+		intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+		// 开启一个带有返回值的Activity，请求码为CROP_PHOTO
+		startActivityForResult(intent, CROP_PHOTO);
+	}
+
+	/**
+	 * 倒计时内部类
+	 */
+	class MyDownTimer extends CountDownTimer {
+		private int purpose;
+
+		public MyDownTimer(long millisInFuture, long countDownInterval,
+				int purpose) {
+			super(millisInFuture, countDownInterval);
+			this.purpose = purpose;
+		}
+
+		@Override
+		public void onTick(long millisUntilFinished) {
+			if (purpose == DurationActivity.GET_DURATION) {
+				// 运行倒计时
+				durationText.setText(Utility.secondToString(MainActivity.this,
+						(int) millisUntilFinished / 1000));
+				durLeftMs = (int) millisUntilFinished;
+			} else if (purpose == DurationActivity.GET_TIMING) {
+				// 延迟启动倒计时(显示分钟数)
+				timingText.setText(Utility.secondToString(MainActivity.this,
+						(int) millisUntilFinished / 1000 / 60 * 60,
+						DurationActivity.GET_TIMING)
+						+ getString(R.string.timing_text2));
+			}
+
+		}
+
+		@Override
+		public void onFinish() {
+			if (purpose == DurationActivity.GET_DURATION) {
+				reset();
+			} else if (purpose == DurationActivity.GET_TIMING) {
+				// 暂定为中速，日后在延迟设置中添加频率设置
+				int freq = K_FREQ * 2 / 3;
+				reset();
+				frequency.setProgress(freq);
+				start_vibrator(freq);
+			}
+		}
+	}
+
+	/**
+	 * 批量隐藏/显示
+	 */
+
+	private void set_multi_visibility(View[] views, boolean visible) {
+		for (View view : views) {
+			if (visible) {
+				view.setVisibility(View.VISIBLE);
+			} else {
+				view.setVisibility(View.INVISIBLE);
+			}
+		}
+	}
+
+}
