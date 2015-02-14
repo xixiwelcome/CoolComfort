@@ -20,16 +20,22 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.cool.comfort.util.Utility;
 import com.cool.comfort.util.VerticalSeekBar;
 
+import net.youmi.android.AdManager;
+import net.youmi.android.banner.AdSize;
+import net.youmi.android.banner.AdView;
+
 public class MainActivity extends Activity implements OnClickListener {
-	
+
 	private RelativeLayout layoutMain;
 	/**
 	 * 定时器刷新间隔（ms）
@@ -114,6 +120,8 @@ public class MainActivity extends Activity implements OnClickListener {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		AdManager.getInstance(this).init("9ec0f78f5a5a6304",
+				"6ef65be5736547cc", false);
 		setContentView(R.layout.activity_main);
 
 		layoutMain = (RelativeLayout) findViewById(R.id.layout_main);
@@ -127,17 +135,13 @@ public class MainActivity extends Activity implements OnClickListener {
 		outputImage = new File(Environment.getExternalStorageDirectory(),
 				"output_image.jpg");
 
-/*		if (outputImage.exists()) {
-			imageUri = Uri.fromFile(outputImage);
-			Bitmap bitmap;
-			try {
-				bitmap = BitmapFactory.decodeStream(getContentResolver()
-						.openInputStream(imageUri));
-				imgMain.setImageBitmap(bitmap);
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			}
-		}*/
+		/*
+		 * if (outputImage.exists()) { imageUri = Uri.fromFile(outputImage);
+		 * Bitmap bitmap; try { bitmap =
+		 * BitmapFactory.decodeStream(getContentResolver()
+		 * .openInputStream(imageUri)); imgMain.setImageBitmap(bitmap); } catch
+		 * (FileNotFoundException e) { e.printStackTrace(); } }
+		 */
 
 		frequency = (VerticalSeekBar) findViewById(R.id.frequency);
 		// 设置频率范围
@@ -184,59 +188,72 @@ public class MainActivity extends Activity implements OnClickListener {
 
 		// 系统初始化
 		reset();
+        //实例化广告条
+		AdView adView = new AdView(this, AdSize.FIT_SCREEN);
+		// 获取要嵌入广告条的布局
+		LinearLayout adLayout = (LinearLayout) findViewById(R.id.adLayout);
+		// 将广告条加入到布局中
+		adLayout.addView(adView);
 	}
 
 	@Override
 	public void onClick(View v) {
-		switch (v.getId()) {
-		case R.id.btn_duration:
-			DurationActivity.actionStart(MainActivity.this, durationPos,
-					DurationActivity.GET_DURATION);
-			break;
-		case R.id.btn_timing:
-			DurationActivity.actionStart(MainActivity.this, timingPos,
-					DurationActivity.GET_TIMING);
-			break;
-		case R.id.btn_backstage:
-			Intent intent = new Intent(Intent.ACTION_MAIN);
-			intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);// 注意开启新栈
-			intent.addCategory(Intent.CATEGORY_HOME);
-			this.startActivity(intent);
-			break;
-		case R.id.btn_change_bg:
-			try {
-				if (outputImage.exists()) {
-					outputImage.delete();
+		try {
+			switch (v.getId()) {
+			case R.id.btn_duration:
+				DurationActivity.actionStart(MainActivity.this, durationPos,
+						DurationActivity.GET_DURATION);
+				break;
+			case R.id.btn_timing:
+				DurationActivity.actionStart(MainActivity.this, timingPos,
+						DurationActivity.GET_TIMING);
+				break;
+			case R.id.btn_backstage:
+				Intent intent = new Intent(Intent.ACTION_MAIN);
+				intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);// 注意开启新栈
+				intent.addCategory(Intent.CATEGORY_HOME);
+				this.startActivity(intent);
+				break;
+			case R.id.btn_change_bg:
+				try {
+					if (outputImage.exists()) {
+						outputImage.delete();
+					}
+					outputImage.createNewFile();
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
-				outputImage.createNewFile();
-			} catch (IOException e) {
-				e.printStackTrace();
+				imageUri = Uri.fromFile(outputImage);
+				intent = new Intent("android.intent.action.PICK");
+				intent.setType("image/*");
+				intent.putExtra("crop", true);
+				intent.putExtra("scale", true);
+				intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
+				startActivityForResult(intent, TAKE_PHOTO);
+				break;
+			case R.id.btn_hide_all:
+				set_multi_visibility(getAllViews(), false);
+				isHide = true;
+				break;
+			case R.id.img_main:
+				// 只看背景时， 如果点击背景，则显示所有视图
+				if (isHide) {
+					set_multi_visibility(getAllViews(), true);
+					isHide = false;
+				}
+				break;
+			case R.id.btn_stop:
+				reset();
+				break;
+			default:
+				break;
 			}
-			imageUri = Uri.fromFile(outputImage);
-			intent = new Intent("android.intent.action.PICK");
-			intent.setType("image/*");
-			intent.putExtra("crop", true);
-			intent.putExtra("scale", true);
-			intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
-			startActivityForResult(intent, TAKE_PHOTO);
-			break;
-		case R.id.btn_hide_all:
-			set_multi_visibility(getAllViews(), false);
-			isHide = true;
-			break;
-		case R.id.img_main:
-			// 只看背景时， 如果点击背景，则显示所有视图
-			if (isHide) {
-				set_multi_visibility(getAllViews(), true);
-				isHide = false;
-			}
-			break;
-		case R.id.btn_stop:
-			reset();
-			break;
-		default:
-			break;
+		} catch (Exception e) {
+			Toast.makeText(MainActivity.this, "非常抱歉,此功能暂不支持您的机型.",
+					Toast.LENGTH_SHORT).show();
+			return;
 		}
+
 	}
 
 	private OnSeekBarChangeListener sbLis = new OnSeekBarChangeListener() {
@@ -283,7 +300,7 @@ public class MainActivity extends Activity implements OnClickListener {
 			} else {
 				hintText.setText(R.string.speed_fast);
 			}
-			long[] pattern = { 0, 100, K_FREQ - (freq * freq) / K_FREQ };
+			long[] pattern = { 0, 100, K_FREQ / 2 - (freq * freq) / K_FREQ / 2 };
 			vibrator.vibrate(pattern, 0);
 		}
 		if (isStop
@@ -431,8 +448,9 @@ public class MainActivity extends Activity implements OnClickListener {
 		intent.putExtra("aspectX", x);
 		intent.putExtra("aspectY", y);
 		// 裁剪后输出图片的尺寸大小
-/*		intent.putExtra("outputX", x);
-		intent.putExtra("outputY", y);*/
+		/*
+		 * intent.putExtra("outputX", x); intent.putExtra("outputY", y);
+		 */
 
 		intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
 		// 开启一个带有返回值的Activity，请求码为CROP_PHOTO
